@@ -14,18 +14,38 @@ fun main() {
     }
 
     runBlocking {
-        client.webSocket(method = HttpMethod.Get, host = "127.0.0.1", port = 8080, path = "/chat") {
-            while(true) {
-                val othersMessage = incoming.receive() as? Frame.Text ?: continue
-                println(othersMessage.readText())
-                val myMessage = readLine();
-                if(myMessage != null) {
-                    send(myMessage)
-                }
-            }
+        client.webSocket(method = HttpMethod.Get, host = "127.0.0.1", port = 8081, path = "/chat") {
+            val messageOutputRoutine = launch { outputMessage() }
+            val userInputRoutine = launch { inputMessages() }
+
+            userInputRoutine.join()
+            messageOutputRoutine.cancelAndJoin()
         }
     }
-
     client.close()
     println("Connection closed. Goodbye!")
+}
+
+suspend fun DefaultClientWebSocketSession.outputMessage() {
+    try {
+        for(message in incoming) {
+            message as? Frame.Text ?: continue
+            println(message.readText())
+        }
+    } catch(e: Exception) {
+        println("Error while receiving ${e.localizedMessage}")
+    }
+}
+
+suspend fun DefaultClientWebSocketSession.inputMessages() {
+    while(true) {
+        val message = readLine() ?: "emptyLine"
+        if(message.equals("exit", true)) return
+        try {
+            send(message)
+        } catch(e: Exception) {
+            println("Error while sending ${e.localizedMessage}")
+            return
+        }
+    }
 }
